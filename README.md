@@ -177,3 +177,14 @@ Ans : check 1 -> is the game joinable (state of the game and person not in any o
       check 2 -> join time of the game ended or not 
       check 3 -> Player already there or not isPlayer[msg.sender] should be false  
 
+
+## Taking fees from the player 
+Player will approve the bingo contract to transfer money on behalf of him 
+so we will use transferfrom 
+
+so first we will approve and then transferfrom 
+
+Player → ERC20.approve(contract, entryFee)
+if we dont approve then txn fails !
+
+Contract → ERC20.transferFrom(player, contract, entryFee)
