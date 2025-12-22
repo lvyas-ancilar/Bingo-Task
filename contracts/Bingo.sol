@@ -2,9 +2,10 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import './Validator.sol';
 
-contract Bingo{
+contract Bingo is Ownable{
     // for each game there will be a struct 
     // then also a mapping for mapping(gameId => gameData)
 
@@ -12,7 +13,7 @@ contract Bingo{
   //IERC20 is a type i.e  this tye of variable which is enrtyToken will point to a erc20 standard contract/token 
   //IERC20 = ERC20 ka blueprint
 
-    constructor(address tokenAddress) {
+    constructor(address tokenAddress) Ownable(msg.sender)  {
     entryToken = IERC20(tokenAddress); // this is basically typecasting , we are typecasting into a erc20 contract 
     }
 
@@ -58,9 +59,9 @@ contract Bingo{
     mapping(uint256 => Game) games;
     uint256 public nextGameId;
 
-    uint256 constant defaultEntryFee = 10 ether; // 10 * 10 ^18 token units , as 18 by default decimal for ecr20 standard 
-    uint256 constant defaultJoinDuration = 5 minutes;
-    uint256 constant defaultTurnDuration = 30 seconds;
+    uint256 public defaultEntryFee = 10 ether; // 10 * 10 ^18 token units , as 18 by default decimal for ecr20 standard 
+    uint256 public defaultJoinDuration = 5 minutes;
+    uint256 public defaultTurnDuration = 30 seconds;
 
 
 
@@ -173,7 +174,23 @@ contract Bingo{
         require(entryToken.transfer(game.winner, payout) , "transfer filed");
 
     }
-    
+
+    function setDefaultEntryFee(uint256 newFee) external onlyOwner {
+    require(newFee > 0, "fee must be > 0");
+    defaultEntryFee = newFee;
+    }
+
+    function setDefaultJoinDuration(uint256 newDuration) external onlyOwner {
+    require(newDuration > 0, "duration must be > 0");
+    defaultJoinDuration = newDuration;
+    }
+
+
+    function setDefaultTurnDuration(uint256 newDuration) external onlyOwner {
+    require(newDuration > 0, "duration must be > 0");
+    defaultTurnDuration = newDuration;
+    }
+
 }
 
 
