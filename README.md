@@ -262,4 +262,10 @@ ensure the numbers are drawn and it matches
 also ensure bingo is not made already 
 and then we transfer the pot to winner address 
 
-Eg : 
+## Mapping and struct 
+```
+mapping
+  └── struct
+        ├── variables
+        └── mappings 
+```
