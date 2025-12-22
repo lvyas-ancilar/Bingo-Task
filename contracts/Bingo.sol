@@ -58,7 +58,7 @@ contract Bingo{
     mapping(uint256 => Game) games;
     uint256 public nextGameId;
 
-    uint256 constant defaultEntryFee = 10 ether; // 10 * 10 ^18 , as 18 by default decimal for ecr20 standard 
+    uint256 constant defaultEntryFee = 10 ether; // 10 * 10 ^18 token units , as 18 by default decimal for ecr20 standard 
     uint256 constant defaultJoinDuration = 5 minutes;
     uint256 constant defaultTurnDuration = 30 seconds;
 
@@ -93,12 +93,6 @@ contract Bingo{
         require(entryToken.transferFrom(msg.sender,address(this),game.entryFee),"entry fee transfer failed");
 
         game.pot += game.entryFee;
-
-        game.players.push(msg.sender);
-        game.isPlayer[msg.sender] = true;
-
-
-        game.boards[msg.sender] = Board({ cells: board });
     
     }
 
@@ -173,9 +167,10 @@ contract Bingo{
 
         game.state = gameState.FINISHED;
         game.winner = msg.sender;
+        uint256 payout = game.pot;
+        game.pot = 0;
 
-        require(entryToken.transfer(game.winner, game.pot) , "transfer filed");
-
+        require(entryToken.transfer(game.winner, payout) , "transfer filed");
 
     }
     
