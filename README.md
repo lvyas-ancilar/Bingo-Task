@@ -188,3 +188,78 @@ Player → ERC20.approve(contract, entryFee)
 if we dont approve then txn fails !
 
 Contract → ERC20.transferFrom(player, contract, entryFee)
+
+
+## Block.timestamp
+block.timestamp = when the block was proposed by block builder , they put the timestamp in the block header as a meta data 
+Now in our bingo game we need time bases states to be changed and things which required time based activity 
+for that we need reference time , so for that we use block.timestamp
+
+Basically block.timestamp is not the actual time ..
+
+Unix epoch is a globally agreed reference point in time : 01 January 1970, 00:00:00 UTC
+Epoch time = 0
+1 second later = 1
+1 minute later = 60
+1 hour later = 3600
+
+block.timestamp = 1,720,000,000
+This literally means : 1,720,000,000 seconds have passed since , 1 Jan 1970, 00:00:00 UTC
+
+
+## block.prevrandao
+prevrandao is the randomness value produced by the beacon chain RANDAO and injected into the execution layer.
+block in its meta data header contains this value 
+
+## claimBingo part , how will we verify it ??
+Ans : Pull based winner claim 
+Player just need to prove one winning line , thats it either row , col or diagonal 
+
+What player will submit ??
+Ans : indexes of the 5 cells that form the winning line
+
+Bingo Board 
+```
+Index layout:
+
+ 0   1   2   3   4
+ 5   6   7   8   9
+10  11  12  13  14
+15  16  17  18  19
+20  21  22  23  24
+```
+
+Eg : Suppose number are drawn : [7, 66, 90, 21, 4]
+Correspond to these incices     [10, 11, 12, 13, 14]
+This is full middle row 
+
+Now player claims bingo 
+player will send the indices like 10,11,12,13,14 
+from here the contract perorms multiple checks 
+
+isValidLine(line) sees ONLY this : [10, 11, 12, 13, 14]
+It does not know
+which player
+which board
+which numbers are drawn
+which game
+
+It just checks :
+All indices are between 0–24
+No duplicates
+All in same row?
+10 / 5 = 2
+11 / 5 = 2
+12 / 5 = 2
+13 / 5 = 2
+14 / 5 = 2
+if YES then  valid
+
+few more things we will check such as player owns the board or not 
+For each index in line : board.cells[index] == drawnNumber?
+
+ensure the numbers are drawn and it matches 
+also ensure bingo is not made already 
+and then we transfer the pot to winner address 
+
+Eg : 

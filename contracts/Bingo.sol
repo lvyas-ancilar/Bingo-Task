@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
+import './Validator.sol';
 
 contract Bingo{
     // for each game there will be a struct 
@@ -19,7 +19,7 @@ contract Bingo{
 
     // game state
     enum gameState{
-        JOINING,
+        JOINING, 
         PLAYING,
         FINISHED
     }
@@ -50,6 +50,7 @@ contract Bingo{
         mapping(address => Board) boards; // bord of player a or board of player b  boards[a] / boards[b]
 
         //  Drawn numbers
+        uint256 drawCount; 
         mapping(uint8 => bool) drawn; // numbers drawn drawn[42] => true 
         uint8[] drawHistory; // so drawnHistory = [1,2,42]
     }
@@ -78,7 +79,7 @@ contract Bingo{
 
     function joinGame (uint256 gameId, uint8[25] calldata board) external {
         
-        Game storage game = games[gameId];
+        Game storage game = games[gameId]; // game reference 
 
         require(game.state == gameState.JOINING, "game not joinable");
         require(block.timestamp <= game.joinEndTime, "joining window closed");
@@ -98,11 +99,85 @@ contract Bingo{
 
 
         game.boards[msg.sender] = Board({ cells: board });
+    
+    }
 
+    function startGame(uint256 gameId) external {
+
+        Game storage game = games[gameId];
+
+        require(game.state == gameState.JOINING, "game not in joining");
+        require(block.timestamp > game.joinEndTime, "join window still open");
+
+        // so now here we change the state 
+        game.state = gameState.PLAYING;
+
+        // setting the clock for the first draw
+        game.lastDrawTime = block.timestamp;
 
     }
 
+    // in every turn we need to draw a random number from the range of 0 - 255 
+    // also duplicate numbers are allowed  
+    function drawNumber(uint256 gameId) external {
 
+        Game storage game = games[gameId];
+
+        require(game.state == gameState.PLAYING, "game not active");
+        require(block.timestamp >= game.lastDrawTime + game.turnDuration,"turn not finished"); // this prevents spam draw
+        // this makes sure ki next draw is after a particular time , which is turn duration 
+
+        // now the main part , random number generation , for randomness source we will use prevrandao 
+
+        uint8 number = uint8( uint256(keccak256(abi.encodePacked(
+        block.prevrandao, // base randomness
+        game.drawCount,   // per-draw uniqueness
+        gameId            // per-game uniqueness
+        ))
+        ));
+
+        //  Update state
+        game.drawn[number] = true;
+        game.drawHistory.push(number);
+        game.drawCount++;
+        game.lastDrawTime = block.timestamp;
+    }
+
+   
+
+    // line is basically what player will give to claim bingo ,the 5 continuous cells : row,col,diagonal
+    function claimBingo(uint256 gameId , uint8[5] calldata line) external {
+        Game storage game = games[gameId];
+
+        require(game.state == gameState.PLAYING , "State is not correct");
+        require(game.isPlayer[msg.sender], "not a player");
+
+        // now validate line structure 
+
+        require(Validate.isValidLine(line), "invalid bingo line");
+
+        // if this gets validated that means we have validated the line , now we need to validate the numbers
+
+        Board storage board = game.boards[msg.sender]; // the board from the player , which we already had when he join the game
+
+        // Verifying the number drawn and the users number he claims , are they equal
+        for(uint256 i = 0 ; i < 5 ; i++){
+            
+            uint8 idx = line[i];
+            if (idx == 12) continue;
+
+            uint8 number = board.cells[idx];
+            require(game.drawn[number], "number not drawn");
+
+        }
+
+        game.state = gameState.FINISHED;
+        game.winner = msg.sender;
+
+        require(entryToken.transfer(game.winner, game.pot) , "transfer filed");
+
+
+    }
     
 }
 
