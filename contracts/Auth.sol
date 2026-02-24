@@ -4,6 +4,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract Auth is ReentrancyGuard, Ownable {
     // Mapping of usernames to user data
@@ -24,7 +25,7 @@ contract Auth is ReentrancyGuard, Ownable {
     // Struct to hold user data
     struct UserData {
         string username;
-        string password;
+        bytes32 password;
         address userAddress;
     }
 
@@ -34,7 +35,7 @@ contract Auth is ReentrancyGuard, Ownable {
         require(bytes(users[_username].username).length == 0, "Username already taken");
 
         // Hash the password
-        string memory hashedPassword = Strings.toHexString(uint256(keccak256(abi.encodePacked(_password))));
+        bytes32 hashedPassword = keccak256(abi.encodePacked(_password));
 
         // Create a new user
         users[_username] = UserData(_username, hashedPassword, msg.sender);
@@ -52,10 +53,10 @@ contract Auth is ReentrancyGuard, Ownable {
         require(bytes(users[_username].username).length != 0, "Username does not exist");
 
         // Hash the input password
-        string memory hashedPassword = Strings.toHexString(uint256(keccak256(abi.encodePacked(_password))));
+        bytes32 hashedPassword = keccak256(abi.encodePacked(_password));
 
         // Check if the input password matches the stored password
-        require(keccak256(abi.encodePacked(users[_username].password)) == keccak256(abi.encodePacked(hashedPassword)), "Incorrect password");
+        require(users[_username].password == hashedPassword, "Incorrect password");
 
         // Emit the log-in event
         emit LogIn(_username, msg.sender);
