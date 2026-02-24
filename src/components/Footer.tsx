@@ -1,11 +1,11 @@
+// import React from 'react';
 import React from 'react';
 
 const Footer = () => {
-  const currentYear = 2026;
   return (
-    <footer>
-      <p>&copy; {currentYear} Bingo Task</p>
-    </footer>
+    <div>
+      <p>Copyright 2026. Developed by Dev Agent</p>
+    </div>
   );
 };
 
