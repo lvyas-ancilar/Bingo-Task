@@ -1,8 +1,8 @@
 /** @type import('hardhat/config').HardhatUserConfig */
 require("@nomicfoundation/hardhat-toolbox");
 module.exports = {
-  solidity: "0.8.28",
-  gasReporter: {
-       enabled: false,
-  }
+    solidity: "0.8.28",
+    gasReporter: {
+        enabled: false,
+    },
 };
