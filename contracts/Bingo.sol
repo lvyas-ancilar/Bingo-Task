@@ -1,198 +1,85 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import './Validator.sol';
 
-contract Bingo is Ownable{
-    // for each game there will be a struct 
-    // then also a mapping for mapping(gameId => gameData)
+contract Bingo is ReentrancyGuard, Ownable {
+    // Mapping of game IDs to game data
+    mapping (uint256 => Game) public games;
 
-    IERC20 public entryToken;  
-  //IERC20 is a type i.e  this tye of variable which is enrtyToken will point to a erc20 standard contract/token 
-  //IERC20 = ERC20 ka blueprint
+    // Mapping of addresses to usernames
+    mapping (address => string) public userAddresses;
 
-    constructor(address tokenAddress) Ownable(msg.sender)  {
-    entryToken = IERC20(tokenAddress); // this is basically typecasting , we are typecasting into a erc20 contract 
-    }
+    // Event emitted when a game is created
+    event GameCreated(uint256 gameId);
 
+    // Event emitted when a bingo is claimed
+    event BingoClaimed(uint256 gameId, address winner, string lineType, uint256 lineIndex);
 
-    // game state
-    enum gameState{
-        JOINING, 
-        PLAYING,
-        FINISHED
-    }
+    // Event emitted when a game is finished
+    event GameFinished(uint256 gameId, address winner, uint256 payout);
 
-    struct Board {
-        uint8[25] cells;
-    }
-
-    struct Game{
-        // State
-        gameState state; // state of the game 
-
-        // Timing
-        uint256 joinEndTime;  // kabh band hoga
-        uint256 lastDrawTime; // last draw kabh nikla tha  
-        uint256 turnDuration; // gap between each draw 
-
-        // Money
-        uint256 entryFee; // entry fee for joining the game 
-        uint256 pot;    // entry fee x players  = pot
-        address winner; // giving the pot to winner 
-
-        //  Players
+    // Struct to hold game data
+    struct Game {
+        uint256 id;
         address[] players;
-        mapping(address => bool) isPlayer;
-
-         //  Boards
-        mapping(address => Board) boards; // bord of player a or board of player b  boards[a] / boards[b]
-
-        //  Drawn numbers
-        uint256 drawCount; 
-        mapping(uint8 => bool) drawn; // numbers drawn drawn[42] => true 
-        uint8[] drawHistory; // so drawnHistory = [1,2,42]
+        uint256[] drawnNumbers;
+        uint256[] board;
+        address winner;
+        uint256 pot;
+        string state;
     }
 
-    mapping(uint256 => Game) games;
-    uint256 public nextGameId;
+    // Function to create a new game
+    function createGame() public {
+        // Create a new game
+        Game memory game;
+        game.id = uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp)));
+        game.state = "Active";
+        games[game.id] = game;
 
-    uint256 public defaultEntryFee = 10 ether; // 10 * 10 ^18 token units , as 18 by default decimal for ecr20 standard 
-    uint256 public defaultJoinDuration = 5 minutes;
-    uint256 public defaultTurnDuration = 30 seconds;
-
-
-
-    function createGame () external {
-
-        uint256 gameId = nextGameId;
-        Game storage game = games[gameId];
-
-        game.state = gameState.JOINING;
-        game.joinEndTime = block.timestamp + defaultJoinDuration;
-        game.turnDuration = defaultTurnDuration;
-        game.entryFee = defaultEntryFee;
-
-        nextGameId++;
+        // Emit the game created event
+        emit GameCreated(game.id);
     }
 
-    function joinGame (uint256 gameId, uint8[25] calldata board) external {
-        
-        Game storage game = games[gameId]; // game reference 
+    // Function to claim a bingo
+    function claimBingo(uint256 _gameId, string memory _lineType, uint256 _lineIndex) public {
+        // Check if the game is in the Active state
+        require(keccak256(abi.encodePacked(games[_gameId].state)) == keccak256(abi.encodePacked("Active")), "Game is not in Active state");
 
-        require(game.state == gameState.JOINING, "game not joinable");
-        require(block.timestamp <= game.joinEndTime, "joining window closed");
-        require(!game.isPlayer[msg.sender], "already joined");
+        // Check if there is no winner already set
+        require(games[_gameId].winner == address(0), "Winner already set");
 
-        game.players.push(msg.sender);
-        game.isPlayer[msg.sender] = true;
+        // Check if the claimed line type is valid
+        require(keccak256(abi.encodePacked(_lineType)) == keccak256(abi.encodePacked("row")) ||
+                keccak256(abi.encodePacked(_lineType)) == keccak256(abi.encodePacked("col")) ||
+                keccak256(abi.encodePacked(_lineType)) == keccak256(abi.encodePacked("diag-main")) ||
+                keccak256(abi.encodePacked(_lineType)) == keccak256(abi.encodePacked("diag-anti")), "Invalid line type");
 
-        game.boards[msg.sender] = Board({ cells: board });
+        // Check if the claimed cells map to exactly 5 board slots
+        require(_lineIndex >= 0 && _lineIndex < 5, "Invalid line index");
 
-        require(entryToken.transferFrom(msg.sender,address(this),game.entryFee),"entry fee transfer failed");
+        // Check if the free center cell is treated as auto-marked
+        require(games[_gameId].board[12] == 1, "Free center cell is not auto-marked");
 
-        game.pot += game.entryFee;
-    
-    }
-
-    function startGame(uint256 gameId) external {
-
-        Game storage game = games[gameId];
-
-        require(game.state == gameState.JOINING, "game not in joining");
-        require(block.timestamp > game.joinEndTime, "join window still open");
-
-        // so now here we change the state 
-        game.state = gameState.PLAYING;
-
-        // setting the clock for the first draw
-        game.lastDrawTime = block.timestamp;
-
-    }
-
-    // in every turn we need to draw a random number from the range of 0 - 255 
-    // also duplicate numbers are allowed  
-    function drawNumber(uint256 gameId) external {
-
-        Game storage game = games[gameId];
-
-        require(game.state == gameState.PLAYING, "game not active");
-        require(block.timestamp >= game.lastDrawTime + game.turnDuration,"turn not finished"); // this prevents spam draw
-        // this makes sure ki next draw is after a particular time , which is turn duration 
-
-        // now the main part , random number generation , for randomness source we will use prevrandao 
-
-        uint8 number = uint8( uint256(keccak256(abi.encodePacked(
-        block.prevrandao, // base randomness
-        game.drawCount,   // per-draw uniqueness
-        gameId            // per-game uniqueness
-        ))
-        ));
-
-        //  Update state
-        game.drawn[number] = true;
-        game.drawHistory.push(number);
-        game.drawCount++;
-        game.lastDrawTime = block.timestamp;
-    }
-
-   
-
-    // line is basically what player will give to claim bingo ,the 5 continuous cells : row,col,diagonal
-    function claimBingo(uint256 gameId , uint8[5] calldata line) external {
-        Game storage game = games[gameId];
-
-        require(game.state == gameState.PLAYING , "State is not correct");
-        require(game.isPlayer[msg.sender], "not a player");
-
-        // now validate line structure 
-
-        require(Validate.isValidLine(line), "invalid bingo line");
-
-        // if this gets validated that means we have validated the line , now we need to validate the numbers
-
-        Board storage board = game.boards[msg.sender]; // the board from the player , which we already had when he join the game
-
-        // Verifying the number drawn and the users number he claims , are they equal
-        for(uint256 i = 0 ; i < 5 ; i++){
-            
-            uint8 idx = line[i];
-            if (idx == 12) continue;
-
-            uint8 number = board.cells[idx];
-            require(game.drawn[number], "number not drawn");
-
+        // Check if all non-center claimed numbers are present in drawn numbers
+        for (uint256 i = 0; i < games[_gameId].drawnNumbers.length; i++) {
+            require(games[_gameId].drawnNumbers[i] != 0, "Undrawn number in line");
         }
 
-        game.state = gameState.FINISHED;
-        game.winner = msg.sender;
-        uint256 payout = game.pot;
-        game.pot = 0;
+        // Set the winner to the claimer address
+        games[_gameId].winner = msg.sender;
 
-        require(entryToken.transfer(game.winner, payout) , "transfer filed");
+        // Set the game state to Finished
+        games[_gameId].state = "Finished";
 
+        // Transfer the full game pot to the winner
+        payable(msg.sender).transfer(games[_gameId].pot);
+
+        // Emit the bingo claimed and game finished events
+        emit BingoClaimed(_gameId, msg.sender, _lineType, _lineIndex);
+        emit GameFinished(_gameId, msg.sender, games[_gameId].pot);
     }
-
-    function setDefaultEntryFee(uint256 newFee) external onlyOwner {
-    require(newFee > 0, "fee must be > 0");
-    defaultEntryFee = newFee;
-    }
-
-    function setDefaultJoinDuration(uint256 newDuration) external onlyOwner {
-    require(newDuration > 0, "duration must be > 0");
-    defaultJoinDuration = newDuration;
-    }
-
-
-    function setDefaultTurnDuration(uint256 newDuration) external onlyOwner {
-    require(newDuration > 0, "duration must be > 0");
-    defaultTurnDuration = newDuration;
-    }
-
 }
-
-
-
-
